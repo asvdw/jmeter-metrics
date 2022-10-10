@@ -5,14 +5,16 @@ class AggregateResults():
         self.tbody = tbody
         self.aggregate_column = data_series
 
-    def generate_aggregate_results(self):
+    def generate_aggregate_results(self, groupby=['label', 'threadLabel']):
         self.aggregation = {
+            'startTime' : [('startTime','first')],
+            'threadLabel': [('threadLabel','first')],
             'label': [('Label','first')],
-            'elapsed': [('Samples','count'), ('Avg','mean'), ('90%',q90), ('95%',q95), ('99%',q99), ('Min','min'), ('Max','max'), ('Throughput', throughput)],
+            'elapsed': [('Samples','count'), ('Avg','mean'), ('90%',q90), ('95%',q95), ('Min','min'), ('Max','max'), ('Throughput', throughput)],
             'success': [('Error%', error_count)],
         }
 
-        self.aggregate_result = (self.aggregate_column.groupby(['label']).agg(self.aggregation))
+        self.aggregate_result = (self.aggregate_column.groupby(groupby).agg(self.aggregation))
 
         self.results = self.aggregate_result.round(2).values.tolist()
 
@@ -38,15 +40,15 @@ class AggregateResults():
             table_tr.insert(3, table_td)
 
             table_td = self.soup.new_tag('td')
-            table_td.string = str(item[4])
+            table_td.string = str(item[10])
             table_tr.insert(4, table_td)
 
             table_td = self.soup.new_tag('td')
-            table_td.string = str(item[5])
+            table_td.string = str(item[6])
             table_tr.insert(5, table_td)
 
             table_td = self.soup.new_tag('td')
-            table_td.string = str(item[6])
+            table_td.string = str(item[4])
             table_tr.insert(6, table_td)
 
             table_td = self.soup.new_tag('td')
@@ -57,9 +59,7 @@ class AggregateResults():
             table_td.string = str(item[8])
             table_tr.insert(8, table_td)
 
-            table_td = self.soup.new_tag('td')
-            table_td.string = str(item[9])
-            table_tr.insert(9, table_td)
+
 
 def error_count(x):
     count = 0
@@ -77,7 +77,6 @@ def error_count(x):
     return str(round(result,2))
 
 def throughput(x):
-    avg = sum(x) / len(x)
     try:
         avg = sum(x) / len(x)
     except ZeroDivisionError:

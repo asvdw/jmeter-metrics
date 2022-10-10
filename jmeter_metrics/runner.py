@@ -1,7 +1,7 @@
 import os
 import argparse
-from .jmetermetrics import generate_report
-from .version import __version__
+from jmetermetrics import generate_report
+from version import __version__
 
 
 def parse_options():
@@ -17,7 +17,7 @@ def parse_options():
     general.add_argument(
         '--logo',
         dest='logo',
-        default='https://i.ibb.co/9qBkwDF/Testing-Fox-Logo.png',
+        default='http://www.blairlancaster.ca/wp-content/uploads/2016/12/212._SUN-S10581_-_Suncor_-_Roads__Grounds_-_Maximum_40_KM_H_Sign_-_May_2014.png',
         help="User logo (default: dummy image )"
     )
 
@@ -65,5 +65,10 @@ def main():
     if args.version:
         print(__version__)
         exit(0)
-
+    args.output = "input/VALID_FULL_22-10-07_18-09_subresults.jtl"
+    # args.output = "input/main.jtl"
+    args.metrics_report_name="metrics.html"
+    args.ignoretableresult = "True"
     generate_report(args)
+
+main()

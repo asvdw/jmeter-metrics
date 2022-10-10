@@ -6,10 +6,84 @@ import pandas as pd
 from bs4 import BeautifulSoup
 from datetime import datetime
 from datetime import timedelta
-from .overview_results import OverviewResults
-from .aggregate_results import AggregateResults
-from .table_results import TableResults
-from .error_results import ErrorResults
+from overview_results import OverviewResults
+from aggregate_results import AggregateResults
+from table_results import TableResults
+from error_results import ErrorResults
+
+
+def generate_aggregate_tbody(soup, page_content_div, div_id, title):
+
+    # Tests div
+    agg_div = soup.new_tag('div')
+    agg_div["id"] = div_id
+    agg_div["class"] = "tabcontent"
+    page_content_div.insert(50, agg_div)
+
+    test_icon_txt = f"""
+                    <h4><b><i class="fa fa-th-large" style="color:CADETBLUE"></i> {title}</b></h4>
+                    <hr></hr>
+                    """
+    agg_div.append(BeautifulSoup(test_icon_txt, 'html.parser'))
+
+    # Create table tag
+    table = soup.new_tag('table')
+    table["id"] = div_id+"_table"
+    table["class"] = "table row-border tablecard"
+    agg_div.insert(10, table)
+
+    thead = soup.new_tag('thead')
+    table.insert(0, thead)
+
+    tr = soup.new_tag('tr')
+    thead.insert(0, tr)
+
+    th = soup.new_tag('th')
+    th.string = "Début"
+    tr.insert(0, th)
+
+    th = soup.new_tag('th')
+    th.string = "Groupe"
+    tr.insert(1, th)
+
+    th = soup.new_tag('th')
+    th.string = "Etiquette"
+    tr.insert(2, th)
+
+    th = soup.new_tag('th')
+    th.string = "Nombre"
+    tr.insert(3, th)
+
+    th = soup.new_tag('th')
+    th.string = "Erreur"
+    tr.insert(4, th)
+
+    th = soup.new_tag('th')
+    th.string = "P95 (ms)"
+    tr.insert(5, th)
+
+    th = soup.new_tag('th')
+    th.string = "Moyenne (ms)"
+    tr.insert(6, th)
+
+    th = soup.new_tag('th')
+    th.string = "Min (ms)"
+    tr.insert(7, th)
+
+    th = soup.new_tag('th')
+    th.string = "Max (ms)"
+    tr.insert(8, th)
+
+
+    suite_tbody = soup.new_tag('tbody')
+    table.insert(11, suite_tbody)
+    test_icon_txt = """
+    <div class="row">
+        <div class="col-md-12" style="height:25px;width:auto;"></div>
+    </div>
+    """
+    agg_div.append(BeautifulSoup(test_icon_txt, 'html.parser'))
+    return suite_tbody
 
 
 def generate_report(opts):
@@ -61,6 +135,37 @@ def generate_report(opts):
         df[['label', 'success', 'elapsed', 'failureMessage', 'responseCode', 'threadName']]
     except Exception:
         exit("Error: Missing one of the required columns in file")
+
+    # additional columns:
+    df['threadName'].replace({"parallel ":""})
+    df['threadNum'] = df['threadName'].str.extract(r"(\d*-\d*)$")
+    df['threadLabel'] = df['threadName'].str.extract(r"(.*) \d*-\d*$")
+    df['threadLabel'].mask(df['threadLabel'].isna(), df['threadName'], inplace=True)
+    df['startTime'] = df.timeStamp.apply(lambda x:str(datetime.fromtimestamp(x/1000))[:19])
+
+    #filtre: remove TG with ()
+    df[~df['threadLabel'].str.contains(r'^\(.*\)$', na=True)]
+
+    #loo for empty
+    #df[df['threadLabel'].str.contains('§§', na=True)]
+
+
+    #TPI:
+    df_tpi = df[['elapsed', 'label', 'threadLabel', 'success', 'startTime']]
+    df_tpi = df_tpi[df_tpi['label'].str.contains('\[TPI', na=False)]
+    df_tpi['threadLabel'].replace({r"(\d*)/(\d*)([*~]\d*)":r"\1 agents - montée \2s - reprise \3"}, regex = True, inplace= True)
+    #TPS:
+    df_tps = df[['elapsed', 'label', 'threadLabel', 'success', 'startTime']]
+    df_tps = df_tps[df_tps['label'].str.contains('\[TPS', na=False)]
+    #df_tps['threadLabel'].replace({r"(\d*)/(\d*)([*~]\d*)":r"\1 agents - montée \2s - reprise \3"}, regex = True, inplace= True)
+
+
+    # "Transactions" columns -> todo rename: flow or TPT
+    transactions_columns = df[['elapsed', 'success', 'threadLabel', 'startTime']]
+    transactions_columns = transactions_columns[transactions_columns['threadLabel'].str.contains(r'^TPT', na=False)]
+    transactions_columns['label'] = ""
+
+
 
     total_count = df[['success']].count().values
 
@@ -167,7 +272,7 @@ def generate_report(opts):
             }
 
             th, td, tr {
-                text-align:center;
+                text-align:left;
                 vertical-align: middle;
             }
 
@@ -195,9 +300,13 @@ def generate_report(opts):
     <div class="loader"></div>
     <div class="sidenav">
         <a> <img class="wrimagecard" src="%s" style="height:20vh;max-width:98%%;"/> </a>
+        <a class="tablink" href="#" onclick="openPage('TPIMetrics', this, '#fc6666'); executeDataTable('#TPIMetrics_table',0, 'asc')"><i class="fa fa-th-large" style="color:CADETBLUE"></i> TPI (Interop)</a>
+        <a class="tablink" href="#" onclick="openPage('TPSMetrics', this, '#fc9966'); executeDataTable('#TPSMetrics_table',0, 'asc')"><i class="fa fa-th-large" style="color:RED"></i> TPS (Services)</a>
+        <a class="tablink" href="#" onclick="openPage('transactionMetrics', this, '#fc6699'); executeDataTable('#transactionMetrics_table',0, 'asc')"><i class="fa fa-th-large" style="color:CADETBLUE"></i>TPT (Flux de transactions)</a>
+        
         <a class="tablink" href="#" id="defaultOpen" onclick="openPage('dashboard', this, '#fc6666')"><i class="fa fa-dashboard" style="color:CORNFLOWERBLUE"></i> Dashboard</a>
         <a class="tablink" href="#" onclick="openPage('overviewMetrics', this, '#fc6666'); executeDataTable('#om',3)"><i class="fa fa-info-circle" style="color:STEELBLUE"></i> Overview</a>
-        <a class="tablink" href="#" onclick="openPage('aggregateMetrics', this, '#fc6666'); executeDataTable('#am',2)"><i class="fa fa-th-large" style="color:CADETBLUE"></i> Aggregate Results</a>
+        <a class="tablink" href="#" onclick="openPage('aggregateMetrics', this, '#fc6666'); executeDataTable('#aggregateMetrics_table',2)"><i class="fa fa-th-large" style="color:CADETBLUE"></i> Aggregate Results</a>
         <a %s class="tablink" href="#" onclick="openPage('testMetrics', this, '#fc6666'); executeDataTable('#tm',3)"><i class="fa fa-th" style="color:CHOCOLATE"></i> Table Results</a>
         <a class="tablink" href="#" onclick="openPage('errorMetrics', this, '#fc6666'); executeDataTable('#em',0)"><i class="fa fa-exclamation-triangle" style="color:PALEVIOLETRED"></i> Failures</a>
     </div>
@@ -297,14 +406,14 @@ def generate_report(opts):
                 <div id="sampleChartID" style="height:280px;width:auto;"></div>
             </div>
             <div class="col-md-8" style="height:350px;width:auto;">
-                <span style="font-weight:bold;color:gray">Top 5 Failed Samples:</span>
+                <span style="font-weight:bold;color:gray">Erreurs fréquentes:</span>
                 <div id="failureBarID" style="height:300px;width:auto;"></div>
             </div>
         </div>
         <hr/>
         <div class="row rowcard">
             <div class="col-md-12" style="height:450px;width:auto;">
-                <span style="font-weight:bold;color:gray">Top 10 Sample Avg Performance(ms):</span>
+                <span style="font-weight:bold;color:gray">Echantillons lents:</span>
                 <div id="aggBarID" style="height:400px;width:auto;"></div>
             </div>
         </div>
@@ -318,12 +427,12 @@ def generate_report(opts):
        <script>
             window.onload = function(){
                 executeDataTable('#om',3);
-                executeDataTable('#am',2);
+                executeDataTable('#aggregateMetrics_table',5);
                 executeDataTable('#tm',2);
                 executeDataTable('#em',0);
                 createPieChart(__PASS__,__FAIL__,'sampleChartID','Status:');
  	            createBarGraph('#om',0,3,5,'failureBarID','Number of failures ','Sample');
-                createBarGraph('#am',0,2,10,'aggBarID','Avg Elapsed Time (ms) ','Aggregate Report');
+                createBarGraph('#aggregateMetrics_table',2,6,10,'aggBarID','Avg Elapsed Time (ms) ','Aggregate Report');
             };
        </script>
     </div>
@@ -402,84 +511,26 @@ def generate_report(opts):
 
     ### ============================ START OF Aggregate Report ======================================= ####
     logging.info(" Capturing aggregate report details...")
-
-    # Tests div
-    agg_div = soup.new_tag('div')
-    agg_div["id"] = "aggregateMetrics"
-    agg_div["class"] = "tabcontent"
-    page_content_div.insert(50, agg_div)
-
-    test_icon_txt = """
-                    <h4><b><i class="fa fa-th-large" style="color:CADETBLUE"></i> Aggregate Report</b></h4>
-                    <hr></hr>
-                    """
-    agg_div.append(BeautifulSoup(test_icon_txt, 'html.parser'))
-
-    # Create table tag
-    table = soup.new_tag('table')
-    table["id"] = "am"
-    table["class"] = "table row-border tablecard"
-    agg_div.insert(10, table)
-
-    thead = soup.new_tag('thead')
-    table.insert(0, thead)
-
-    tr = soup.new_tag('tr')
-    thead.insert(0, tr)
-
-    th = soup.new_tag('th')
-    th.string = "Label"
-    tr.insert(0, th)
-
-    th = soup.new_tag('th')
-    th.string = "Samples"
-    tr.insert(1, th)
-
-    th = soup.new_tag('th')
-    th.string = "Average (ms)"
-    tr.insert(2, th)
-
-    th = soup.new_tag('th')
-    th.string = "90% Line"
-    tr.insert(3, th)
-
-    th = soup.new_tag('th')
-    th.string = "95% Line"
-    tr.insert(4, th)
-
-    th = soup.new_tag('th')
-    th.string = "99% Line"
-    tr.insert(5, th)
-
-    th = soup.new_tag('th')
-    th.string = "Min (ms)"
-    tr.insert(6, th)
-
-    th = soup.new_tag('th')
-    th.string = "Max (ms)"
-    tr.insert(7, th)
-
-    th = soup.new_tag('th')
-    th.string = "Throughput"
-    tr.insert(8, th)
-
-    th = soup.new_tag('th')
-    th.string = "Error %"
-    tr.insert(9, th)
-
-    suite_tbody = soup.new_tag('tbody')
-    table.insert(11, suite_tbody)
+    suite_tbody = generate_aggregate_tbody(soup, page_content_div, "aggregateMetrics", "Aggregate Report")
 
     # GET Summary results
-    summary_columns = df[['label', 'elapsed', 'success']]
+    summary_columns = df[['label', 'elapsed', 'success', 'threadLabel', 'startTime']]
     AggregateResults(soup, suite_tbody, summary_columns).generate_aggregate_results()
 
-    test_icon_txt = """
-    <div class="row">
-        <div class="col-md-12" style="height:25px;width:auto;"></div>
-    </div>
-    """
-    agg_div.append(BeautifulSoup(test_icon_txt, 'html.parser'))
+    ### ============================ START OF Transactions Report ======================================= ####
+
+
+    logging.info(" Capturing transaction report details...")
+    suite_tbody = generate_aggregate_tbody(soup, page_content_div, "transactionMetrics", "TPF (Flux de Transactions)")
+    AggregateResults(soup, suite_tbody, transactions_columns).generate_aggregate_results()
+
+    logging.info(" TPI...")
+    suite_tbody = generate_aggregate_tbody(soup, page_content_div, "TPIMetrics", "TPI (Interop)")
+    AggregateResults(soup, suite_tbody, df_tpi).generate_aggregate_results()
+
+    logging.info(" TPS...")
+    suite_tbody = generate_aggregate_tbody(soup, page_content_div, "TPSMetrics", "TPS (Services)")
+    AggregateResults(soup, suite_tbody, df_tps).generate_aggregate_results()
     ### ============================ END OF Aggregate Report ============================================ ####
 
     ### ============================ START OF Table Results ======================================= ####
@@ -699,7 +750,7 @@ def generate_report(opts):
         </script>
 
      <script>
-      function executeDataTable(tabname,sortCol) {
+      function executeDataTable(tabname,sortCol, order="desc") {
         var fileTitle;
         switch(tabname) {
             case "#om":
@@ -714,6 +765,9 @@ def generate_report(opts):
             case "#em":
                 fileTitle =  "Failures";
                 break;
+            case "#TPIMetrics":
+                 fileTitle =  "Rapport TPI";
+                break;           
             default:
                 fileTitle =  "metrics";
         }
@@ -721,7 +775,8 @@ def generate_report(opts):
         $(tabname).DataTable(
             {
                 retrieve: true,
-                "order": [[ Number(sortCol), "desc" ]],
+                iDisplayLength: 50,
+                "order": [[ Number(sortCol), order ]],
                 dom: 'l<".margin" B>frtip',
                 buttons: [
                     {
